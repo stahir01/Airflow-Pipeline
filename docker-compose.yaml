@@ -80,7 +80,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/dataset:/opt/airflow/dataset
     - ${AIRFLOW_PROJ_DIR:-.}/secrets:/opt/airflow/secrets
     - ${AIRFLOW_PROJ_DIR:-.}/helper-functions:/opt/airflow/helper-functions
-    - ${AIRFLOW_PROJ_DIR:-.}/storage:/opt/airflow/storage
+    - ${AIRFLOW_PROJ_DIR:-.}/helper-functions:/opt/airflow/tests
     - ${AIRFLOW_PROJ_DIR:-.}/requirements.txt:/requirements.txt
   user: "${AIRFLOW_UID:-50000}:0"
   env_file:
