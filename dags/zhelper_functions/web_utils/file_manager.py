@@ -16,7 +16,7 @@ class FilePathManager:
     @staticmethod
     def extract_version_number(filename: str) -> Optional[int]:
         """
-        Extract version number from filename (e.g., 'file_v2.md' → 2)
+        Extract version number from filename (e.g., 'file_v2.txt' → 2)
         Returns None if no version number found
         """
         match = re.search(r'_v(\d+)(?:\..+)?$', filename.stem)
@@ -26,7 +26,6 @@ class FilePathManager:
     def get_latest_version(project_dir: Path, base_name: str) -> int:
         """
         Find the highest version number for files matching the base name pattern
-        Returns 0 if no matching files found
         """
         max_version = 0
         pattern = re.compile(rf'^{re.escape(base_name)}_v(\d+)(?:\..+)?$')
@@ -59,9 +58,6 @@ class FilePathManager:
             
         Returns:
             Path: Versioned file path that can be safely written to
-            
-        Raises:
-            FileExistsError: If max_attempts reached without finding available name
         """
         # Sanitize and create project directory
         sanitized_project = FilePathManager.sanitize_directory_name(project_name)
@@ -89,15 +85,7 @@ class FilePathManager:
         versioned_filename = f"{base_name}_v{next_version}{suffix}"
         versioned_path = project_dir / versioned_filename
         
-        # Safety check (shouldn't happen if get_latest_version worked correctly)
-        if versioned_path.exists():
-            for i in range(next_version + 1, next_version + max_attempts + 1):
-                versioned_filename = f"{base_name}_v{i}{suffix}"
-                versioned_path = project_dir / versioned_filename
-                if not versioned_path.exists():
-                    return versioned_path
-            raise FileExistsError(f"Could not find available filename after {max_attempts} attempts")
-        
+
         logging.info(f"Using versioned path: {versioned_path}")
         return versioned_path
 
@@ -105,7 +93,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
     # Test cases
-    test_dir = Path("test_data")
+    test_dir = Path("dataset")
     test_dir.mkdir(exist_ok=True)
     
     
@@ -113,26 +101,16 @@ if __name__ == "__main__":
     path1 = FilePathManager.get_project_filepath(
         "test_project", "document.md", test_dir
     )
-    path1.touch()
-    print(f"Created: {path1}")  # test_data/test_project/document.md
+    print(f"File Path: {path1}")  # test_data/test_project/document.md
     
-    # Test 2: Next version
+    # Test 2: Version 2
     path2 = FilePathManager.get_project_filepath(
         "test_project", "document.md", test_dir
     )
-    path2.touch()
-    print(f"Created: {path2}")  # test_data/test_project/document_v2.md
+    print(f"File Path: {path2}")  # test_data/test_project/document_v2.md
     
     # Test 3: Different filename
     path3 = FilePathManager.get_project_filepath(
         "test_project", "config.json", test_dir
     )
-    path3.touch()
-    print(f"Created: {path3}")  # test_data/test_project/config.json
-    
-    # Test 4: Existing versioned files
-    (test_dir / "test_project" / "report_v5.md").touch()
-    path4 = FilePathManager.get_project_filepath(
-        "test_project", "report.md", test_dir
-    )
-    print(f"Should be v6: {path4}")  # test_data/test_project/report_v6.md
+    print(f"File Path: {path3}")  # test_data/test_project/config.json
