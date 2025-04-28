@@ -11,7 +11,7 @@ import validators
 import logging
 import re
 from collections import deque
-from dags.helper_functions import FilePathManager
+from dags.util.file_manager import FilePathManager
 
 
 default_args = {

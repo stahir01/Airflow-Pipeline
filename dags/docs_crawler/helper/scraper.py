@@ -1,13 +1,16 @@
 import os 
 import sys
 from bs4 import BeautifulSoup
-from dags.helper_functions import FilePathManager
+from dags.util.file_manager import FilePathManager
+from urllib.parse import urlparse, urljoin
 from pathlib import Path
 from typing import List, Dict, Optional
 import logging
 import requests
 import json
 import validators
+from time import sleep
+
 
 # TODO: Go to each website take all the links 
 #       Each website, store its content in json format
@@ -46,13 +49,14 @@ class PageScraper:
         return headings
     
     @staticmethod
-    def get_links(self, soup: BeautifulSoup) -> List[str]:
+    def get_links(soup: BeautifulSoup, base_url: str) -> List[str]:
         links = []
-        for link in soup.find_all('a'):
-            href = link.get('href')
-            if validators.url(href):
-                links.append(href)
-        
+        for link in soup.find_all('a', href=True):
+            href = link['href']
+            if href.startswith('#') or ':' in href.split('/')[0]:
+                continue
+            absolute_url = urljoin(base_url, href)
+            links.append(absolute_url)
         return links
     
     @staticmethod
@@ -80,22 +84,48 @@ class WebsiteScraper:
             max_depth: int = 3
     ): 
         self.base_url = base_url
+        self.base_domain = urlparse(base_url).netloc
         self.output_dir = output_dir
         self.project_name = project_name
         self.max_depth = max_depth
         self.visited_urls = set()
+        self.request_delay = 3
 
     def is_valid_url(self, url: str) -> bool:
-        validation = validators.url(url)
-
-        return validation
+        try:
+            # Convert relative URLs to absolute
+            if not urlparse(url).netloc:
+                url = urljoin(self.base_url, url)
+                
+            parsed = urlparse(url)
+            return (
+                validators.url(url) and
+                parsed.netloc == self.base_domain and
+                parsed.scheme in ['http', 'https'] and
+                url not in self.visited_urls
+            )
+        except:
+            return False
 
 
     def scrape_page(self, url: str, current_depth: int = 0) -> Optional[Dict]:
+        sleep(self.request_delay)
+
+        try:
+            current_depth = int(current_depth)
+        except (ValueError, TypeError):
+            current_depth = 0
+            logging.warning(f"Invalid current_depth value, defaulting to 0. Received: {current_depth}")
+
         if current_depth > self.max_depth:
+            logging.debug(f"Max depth {self.max_depth} reached at {url}")
             return None 
         
         try: 
+            parsed = urlparse(url)
+            if not parsed.scheme:
+                url = f"https://{url}"
+
             self.visited_urls.add(url)
             response = requests.get(url)
             response.raise_for_status()
@@ -113,7 +143,7 @@ class WebsiteScraper:
                 }
             
             # Save the page data to a file
-            for link in PageScraper.get_links(soup, url):
+            for link in PageScraper.get_links(soup):
                 if self.is_valid_url(link):
                     page_data["links"].append(link)
                     # Recursively scrape linked pages
@@ -121,7 +151,7 @@ class WebsiteScraper:
                     if linked_data:
                         page_data.setdefault("linked_pages", []).append(linked_data)
             
-            self.save_page(page_data)
+            self.save_page(self.project_name, page_data)
             return page_data
     
         except Exception as e:
@@ -129,8 +159,10 @@ class WebsiteScraper:
             return None
 
         
-    @staticmethod
-    def save_page(project_name: str, page_data: Dict) -> None:
+    def save_page(self, project_name: str, page_data: Dict) -> None:
+        if not page_data:
+            logging.error("No page data to save")
+            return
 
         for key, value in page_data.items():
             if page_data[key] == 'title':
@@ -156,10 +188,8 @@ if __name__ == "__main__":
     project_name = 'docs_crawler'
     
     scraper = WebsiteScraper(base_url, output_dir, project_name)
-    scrapped_data = scraper.scrape_page(base_url)
+    scrapped_data = scraper.scrape_page(project_name, base_url)
     print(f"Scraped data from {base_url}")
-    scraper.save_page(project_name, scrapped_data)
-    
-        
+    #scraper.save_page(project_name, scrapped_data)
 
         
