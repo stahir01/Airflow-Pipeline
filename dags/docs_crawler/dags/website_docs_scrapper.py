@@ -22,23 +22,43 @@ def is_valid_url(url: str) -> bool:
 
 def get_links(soup: BeautifulSoup, base_url: str) -> List[str]:
     """
-    Extracts all internal links from a BeautifulSoup object.
+    Extracts relevant internal links from a BeautifulSoup object.
 
     Args:
         soup (BeautifulSoup): The BeautifulSoup object representing the HTML content.
         base_url (str): The base URL of the page.
 
     Returns:
-        List[str]: A list of absolute URLs on the same domain.
+        List[str]: A list of absolute URLs on the same domain, filtered for relevance.
     """
+    CONTENT_CONTAINERS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
+                         'li', 'td', 'th', 'blockquote', 'div.content']
+    
     links = []
     parsed_base = urlparse(base_url)
-    for link in soup.find_all('a', href=True):
-        href = link.get('href')
-        absolute_url = urljoin(base_url, href)
-        parsed_link = urlparse(absolute_url)
-        if parsed_link.netloc == parsed_base.netloc:  
-            links.append(absolute_url)
+    
+    # Find main content containers
+    for container in CONTENT_CONTAINERS:
+        for element in soup.find_all(container):
+            # Skip elements in navigation sections that might have slipped through
+            if element.find_parent(['nav', 'header', 'footer']):
+                continue
+                
+            for link in element.find_all('a', href=True):
+                href = link.get('href')
+                absolute_url = urljoin(base_url, href)
+                
+                # Normalize URL
+                parsed_link = urlparse(absolute_url)
+                clean_url = parsed_link._replace(
+                    query="", 
+                    fragment="",
+                    path=parsed_link.path.rstrip('/') 
+                ).geturl()
+                
+                if parsed_link.netloc == parsed_base.netloc:
+                    links.append(clean_url)
+    
     return list(set(links)) 
 
 def scrape_page(url: str) -> Optional[Dict]:
@@ -151,9 +171,12 @@ def process_website(**kwargs) -> List[str]:
 
     parsed_base = urlparse(base_url)
     visited: Set[str] = set()
+    seen: Set[str] = set()  
     queue = deque([(base_url, 0)])
     saved_files: List[str] = []
 
+    seen.add(base_url)
+    
     while queue:
         if not queue:
             logging.info("Queue is empty, crawl complete.")
@@ -175,20 +198,24 @@ def process_website(**kwargs) -> List[str]:
                 if file_path:
                     saved_files.append(str(file_path))
 
-                asset_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.css', '.js', '.ico', '.xml', '.pdf', '.svg'}
-                for link in content['links']:
-                    parsed_link = urlparse(link)
-                    if parsed_link.netloc == parsed_base.netloc and link not in visited:
-                        if not any(link.lower().endswith(ext) for ext in asset_extensions):
-                            if len(queue) < max_queue_size:
-                                queue.append((link, depth + 1))
-                            else:
-                                logging.info(f"Queue full, not adding (potential content link): {link}")
+                soup = BeautifulSoup(requests.get(current_url).content, 'html.parser')
+                new_links = get_links(soup, current_url)
+                
+                for link in new_links:
+                    # Check if we've already seen or processed this URL
+                    if link not in seen and link not in visited:
+                        if len(queue) < max_queue_size:
+                            queue.append((link, depth + 1))
+                            seen.add(link)  # Mark as seen
+                            logging.debug(f"Added to queue: {link}")
                         else:
-                            logging.info(f"Skipping asset link: {link}")
+                            logging.info(f"Queue full, skipping: {link}")
+                    else:
+                        logging.debug(f"Skipping duplicate: {link}")
 
         except Exception as e:
             logging.error(f"Error processing {current_url}: {e}")
+
 
     kwargs['ti'].xcom_push(key='saved_files', value=saved_files)
 
@@ -271,7 +298,7 @@ crawl_website_task = PythonOperator(
         'base_url': 'https://en.wikipedia.org/wiki/Aristotle',
         'project_name': 'docs_crawler',
         'max_depth': 3,
-        'max_queue_size': 10
+        'max_queue_size': 20
     },
     dag=dag,
     provide_context=True,
@@ -283,8 +310,8 @@ crawl_website_task
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    #base_url = 'https://en.wikipedia.org/wiki/Aristotle'
-    base_url = 'https://medium.com/@prithvijit.guha245/hello-world-airflow-docker-9102f4c5305b'
+    base_url = 'https://en.wikipedia.org/wiki/Aristotle'
+    #base_url = 'https://medium.com/@prithvijit.guha245/hello-world-airflow-docker-9102f4c5305b'
     project_name = "docs_crawler"
     max_depth = 2 
 
