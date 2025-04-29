@@ -35,8 +35,17 @@ This section provides instructions for setting up Apache Airflow using Docker Co
         ```bash
         pip install -r requirements.txt
         ```
+4. **Enable Email Notifications:**
+    * To receive email alerts for DAG task failures, you need to configure email notifications in Airflow.
+    * First, enable email notifications in your Google account by following the instructions in this guide: [Email Alerting with Airflow](https://medium.com/@chibuokejuliet/email-alerting-with-airflow-c0a5a1f413b4).
+    * Add the following variables to your `.env` file:
 
-4.  **Build the Docker Images:**
+        ```
+        AIRFLOW_RECOVERY_EMAIL=<your_email@gmail.com>
+        AIRFLOW_RECOVERY_PASSWORD=<your_email_app_generated_password>
+        ```
+
+5.  **Build the Docker Images:**
 
     * This command builds the Docker images defined in the `docker-compose.yml` file. This includes the Airflow image and any other services it depends on (like the database).  This step is crucial for setting up the Airflow environment.
 
@@ -44,7 +53,7 @@ This section provides instructions for setting up Apache Airflow using Docker Co
         docker-compose build
         ```
 
-5.  **Run the Docker Containers:**
+6.  **Run the Docker Containers:**
 
     * This command starts all the services defined in the `docker-compose.yml` file.  Airflow and its related services will be running in Docker containers.
 
@@ -52,7 +61,7 @@ This section provides instructions for setting up Apache Airflow using Docker Co
         docker-compose up
         ```
 
-6.  **Access Airflow:**
+7.  **Access Airflow:**
 
     * Once the containers are running, you can access the Airflow web interface in your browser at:
 
