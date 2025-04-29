@@ -1,17 +1,17 @@
-from datetime import datetime, timedelta
-from airflow import DAG
-from airflow.operators.python import PythonOperator, BranchPythonOperator
-from typing import List, Dict, Optional, Set
-from pathlib import Path
 import os
+import re
 import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
 import markdownify
 import validators
 import logging
-import re
+from datetime import datetime, timedelta
+from airflow import DAG
+from airflow.operators.python import PythonOperator, BranchPythonOperator
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
 from collections import deque
+from typing import List, Dict, Optional, Set
+from pathlib import Path
 from dags.util.file_manager import FilePathManager
 
 
@@ -21,6 +21,16 @@ def is_valid_url(url: str) -> bool:
 
 
 def get_links(soup: BeautifulSoup, base_url: str) -> List[str]:
+    """
+    Extracts all internal links from a BeautifulSoup object.
+
+    Args:
+        soup (BeautifulSoup): The BeautifulSoup object representing the HTML content.
+        base_url (str): The base URL of the page.
+
+    Returns:
+        List[str]: A list of absolute URLs on the same domain.
+    """
     links = []
     parsed_base = urlparse(base_url)
     for link in soup.find_all('a', href=True):
@@ -32,9 +42,19 @@ def get_links(soup: BeautifulSoup, base_url: str) -> List[str]:
     return list(set(links)) 
 
 def scrape_page(url: str) -> Optional[Dict]:
-    """Task 3: Scrape individual page content"""
+    """
+    Scrapes the content of a single web page, extracts the main content, title, and links.
+
+    Args:
+        url (str): The URL of the page to scrape.
+
+    Returns:
+        Optional[Dict[str, str]]: A dictionary containing the URL, title, content, and links,
+                        or None if the scraping fails.
+    """
     try:
-        response = requests.get(url, timeout=10)
+        headers = {'User-Agent': 'Mozilla/5.0 (compatible; AirflowCrawler/1.0)'}
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -64,8 +84,17 @@ def scrape_page(url: str) -> Optional[Dict]:
         return None     
 
 
-def save_as_markdown(content: Dict, project_name: str) -> Optional[Path]:
-    """Save content to versioned markdown file"""
+def save_as_markdown(content: Dict[str, str], project_name: str) -> Optional[Path]:
+    """
+    Saves the scraped content as a Markdown file.
+
+    Args:
+        content (Dict[str, str]): A dictionary containing the page's URL, title, and content.
+        project_name (str): The name of the project.
+
+    Returns:
+        Optional[Path]: The path to the saved Markdown file, or None on error.
+    """
     try:
         if not content or not content.get('content'):
             logging.warning(f"No content to save for {content.get('url')}")
@@ -98,7 +127,19 @@ def save_as_markdown(content: Dict, project_name: str) -> Optional[Path]:
         logging.error(f"Failed to save markdown for {content.get('url')}: {e}")
         return None
 
-def process_website(**kwargs):
+def process_website(**kwargs) -> List[str]:
+    """
+    Crawls a website, scrapes content, and saves it as Markdown files.
+
+    Args:
+        base_url (str): The starting URL for the crawl.
+        project_name (str): The name of the project.
+        max_depth (int): The maximum depth to crawl.
+        max_queue_size (int): The maximum number of URLs to keep in the queue.
+
+    Returns:
+       List[str]: A list of filepaths that were saved.
+    """
     base_url = kwargs['base_url']
     project_name = kwargs['project_name']
     max_depth = kwargs['max_depth']
@@ -111,10 +152,11 @@ def process_website(**kwargs):
     parsed_base = urlparse(base_url)
     visited: Set[str] = set()
     queue = deque([(base_url, 0)])
-    saved_files = []
+    saved_files: List[str] = []
 
     while queue:
         if not queue:
+            logging.info("Queue is empty, crawl complete.")
             break
             
         current_url, depth = queue.popleft()
@@ -200,7 +242,7 @@ def process_website(base_url: str, project_name: str, max_depth: int = 1, max_qu
 """
 
 # --------------------------
-# DAG Structure
+# DAG Configuration
 # --------------------------
 
 default_args = {
@@ -232,10 +274,9 @@ crawl_website_task = PythonOperator(
         'max_queue_size': 10
     },
     dag=dag,
-    provide_context=True, # Add this
+    provide_context=True,
 )
 
-# Define workflow
 crawl_website_task
 
 
