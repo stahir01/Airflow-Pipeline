@@ -107,3 +107,87 @@ airflow
 * `.env`: This file is used to store environment variables, which can be used to configure Airflow and your DAGs.  This is useful for settings that vary between environments (e.g., development, production).
 
 **Note:** If you want to add other folders to your Airflow setup, you'll need to include them in the `volumes` section of your `docker-compose.yml` file to ensure they are properly mounted and accessible by the Airflow containers.
+
+
+### DAG: Website Documentation Crawler Explanation
+The DAG for the website documentation crawler is designed to automate the process of crawling a website, extracting content, and saving it in a structured format.  Below is an explanation of the key components and logic of the DAG.
+
+This project implements a web crawler designed to extract content from website documentation and save it in a structured format. It is built for integration with Apache Airflow.
+
+
+#### Key Components and How They Work
+
+1.  **`process_website` Function:**
+
+    * Orchestrates the crawling process.
+    * Takes crawler configuration (`base_url`, `project_name`, `max_depth`, `max_queue_size`, `timeout`, `headers`) as input.
+    * Uses a queue (`deque`) to manage URLs to be visited.
+    * Iteratively fetches page content, extracts relevant information, saves it as Markdown, and adds new links to the queue.
+    * Crawling continues until the queue is empty or the maximum depth is reached.
+
+2.  **`scrape_page` Function:**
+
+    * Scrapes content from a single web page.
+    * Takes a URL and crawler configuration as input.
+    * Fetches the page, parses HTML, extracts title, main content, and links.
+    * Returns the extracted data as a dictionary.
+    * Uses `BeautifulSoup` for HTML parsing and `markdownify` for HTML-to-Markdown conversion.
+
+3.  **`save_as_markdown` Function:**
+
+    * Saves extracted content to a Markdown file.
+    * Takes the content dictionary and project name as input.
+    * Generates a filename, creates the directory structure, and writes the Markdown content to the file.
+
+4.  **`get_links` Function:**
+
+    * Extracts all internal links from a BeautifulSoup object
+    * Takes a BeautifulSoup object and base URL as input
+    * Finds all hyperlinks and returns a list of absolute URLs
+
+5.  **Airflow DAG (`website_docs_crawler`)**
+
+    * Defines the web crawling workflow.
+    * Uses a `PythonOperator` to execute the `process_website` function.
+    * DAG is configured to run daily.
+    * `crawl_website_task` performs the crawling.
+
+#### Explanation of Key Parameters
+
+* `max_depth`: Controls how far the crawler follows links from the starting URL.
+    * 0: Only the starting URL is visited.
+    * 1:  The starting URL and its direct links are visited.
+    * 2:  The starting URL, its direct links, and their links are visited, and so on.
+* `max_queue_size`: Limits the number of URLs the crawler keeps in its queue, preventing excessive memory usage.
+
+
+### Website Documentation Crawler
+
+#### DAG Structure
+The Airflow DAG(s) for this crawler are located within the `dags/docs_crawler` directory.
+
+
+#### Task Details
+
+* **Single Task Design**: The current DAG implementation uses a single task. Due to the recursive nature of web crawling, where the crawler discovers new pages by following links, it's challenging to decompose the core crawling logic into multiple, independent Airflow tasks in a traditional way. Airflow DAGs are designed around well-defined sequences of tasks, and recursion doesn't fit that model neatly.
+
+* **Typical Workflow Context**: In a larger data pipeline, this crawling task would likely be one component within a broader workflow. Common subsequent steps include:
+    * **ETL (Extract, Transform, Load):** Further processing of the extracted data.
+    * **Data Conversion:** Converting the Markdown files into other formats (e.g., JSON).
+    * **Vector Database Ingestion:** Storing the processed data in a vector database to support Retrieval Augmented Generation (RAG) applications.
+
+* **Helper Function Approach**: The crawling logic is designed to be encapsulated as a reusable helper function. You can find a similar approach in `dags/docs_crawler/helper/scraper.py` (though it's noted as incomplete). The goal is to create a modular function that can be easily integrated into various Airflow DAGs as a task. The `scraper.py` example aims to output data in JSON format.
+
+#### Potential Improvements
+
+The following are potential improvements that could not be implemented in the current code due to time constraints:
+
+* **Unit Testing**: Adding unit tests using `pytest` to ensure the reliability and correctness of the crawling logic.
+* **JSON Output**: Storing the extracted data in JSON format for better data interoperability and compatibility with other systems.
+* **Database Storage**: Storing the crawled data in a database such as MongoDB. Storing data locally in Markdown files is not efficient for large-scale applications.
+* **External Library - crawl4ai**: During the development of this crawler, the `crawl4ai` library was identified as a potentially more efficient and robust solution. `crawl4ai` is specifically designed for web crawling and offers features such as:
+    * **Asynchronous Crawling**: This allows for faster and more efficient crawling by making multiple requests concurrently.
+    * **Built-in Data Storage**: It can store crawled data in various formats, including JSON and databases.
+    * **BFS (Breadth-First Search) and DFS (Depth-First Search)**: The library supports both BFS and DFS crawling strategies, allowing for flexibility in how the crawler navigates through web pages.
+
+For real-world production applications, `crawl4ai` (or a similar specialized library) is recommended due to its efficiency and features tailored for RAG.

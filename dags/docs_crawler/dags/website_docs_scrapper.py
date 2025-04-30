@@ -37,10 +37,9 @@ def get_links(soup: BeautifulSoup, base_url: str) -> List[str]:
     links = []
     parsed_base = urlparse(base_url)
     
-    # Find main content containers
     for container in CONTENT_CONTAINERS:
         for element in soup.find_all(container):
-            # Skip elements in navigation sections that might have slipped through
+            # Skip elements in navigation sections
             if element.find_parent(['nav', 'header', 'footer']):
                 continue
                 
@@ -169,7 +168,6 @@ def process_website(**kwargs) -> List[str]:
     if not is_valid_url(base_url):
         raise ValueError(f"Invalid base URL: {base_url}")
 
-    parsed_base = urlparse(base_url)
     visited: Set[str] = set()
     seen: Set[str] = set()  
     queue = deque([(base_url, 0)])
@@ -218,55 +216,6 @@ def process_website(**kwargs) -> List[str]:
 
 
     kwargs['ti'].xcom_push(key='saved_files', value=saved_files)
-
-"""
-def process_website(base_url: str, project_name: str, max_depth: int = 1, max_queue_size: int = 10) -> List[str]:
-    if not is_valid_url(base_url):
-        raise ValueError(f"Invalid base URL: {base_url}")
-
-    parsed_base = urlparse(base_url)
-    visited: Set[str] = set()
-    queue = deque([(base_url, 0)])
-    saved_files = []
-
-    while queue:
-        if not queue:
-            break
-            
-        current_url, depth = queue.popleft()
-
-        if depth > max_depth or current_url in visited:
-            continue
-
-        try:
-            visited.add(current_url)
-            logging.info(f"Processing {current_url} (depth {depth})")
-
-            # Scrape page content
-            content = scrape_page(current_url)
-            if content:
-                # Save markdown
-                file_path = save_as_markdown(content, project_name)
-                if file_path:
-                    saved_files.append(str(file_path))
-
-                asset_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.css', '.js', '.ico', '.xml', '.pdf', '.svg'}
-                for link in content['links']:
-                    parsed_link = urlparse(link)
-                    if parsed_link.netloc == parsed_base.netloc and link not in visited:
-                        if not any(link.lower().endswith(ext) for ext in asset_extensions):
-                            if len(queue) < max_queue_size:
-                                queue.append((link, depth + 1))
-                            else:
-                                logging.info(f"Queue full, not adding (potential content link): {link}")
-                        else:
-                            logging.info(f"Skipping asset link: {link}")
-
-        except Exception as e:
-            logging.error(f"Error processing {current_url}: {e}")
-
-    return saved_files
-"""
 
 # --------------------------
 # DAG Configuration
